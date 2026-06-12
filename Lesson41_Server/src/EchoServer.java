@@ -3,18 +3,37 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
+import java.util.function.Function;
 
 public class EchoServer {
     private final int port;
 
 
+    private final Map<String, Function<String, String>> commands = new HashMap<>();
+
     private EchoServer(int port) {
         this.port = port;
+        initCommands();
     }
 
-    public static EchoServer bindToPort(int port){
+    private void initCommands() {
+        commands.put("date", msg -> LocalDate.now().toString());
+        commands.put("time", msg -> LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+        commands.put("reverse", msg -> {
+            var text = msg.substring("reverse".length()).strip();
+            return new StringBuilder(text).reverse().toString();
+        });
+        commands.put("upper", msg -> msg.substring("upper".length()).strip().toUpperCase());
+    }
+
+    public static EchoServer bindToPort(int port) {
         return new EchoServer(port);
     }
 
@@ -30,29 +49,36 @@ public class EchoServer {
         }
     }
 
-    private void handle(Socket socket) throws IOException{
+    private void handle(Socket socket) throws IOException {
         var input = socket.getInputStream();
         var isr = new InputStreamReader(input, "UTF-8");
         var output = socket.getOutputStream();
         var writer = new PrintWriter(output, false);
-        try (var sc = new Scanner(isr); writer){
-            while (true){
+
+        try (var sc = new Scanner(isr); writer) {
+            while (true) {
                 var message = sc.nextLine().strip();
                 System.out.printf("Got: %s%n", message);
-                if (message.toLowerCase().equals("bye")){
+
+
+                if (message.toLowerCase().equals("bye")) {
                     System.out.println("Bye bye");
                     return;
                 }
-                var reserved = new StringBuilder(message).reverse().toString();
-                writer.write(reserved);
+
+
+                var keyword = message.split(" ")[0].toLowerCase();
+
+                var handler = commands.getOrDefault(keyword, msg -> msg);
+                var response = handler.apply(message);
+
+                writer.write(response);
                 writer.write(System.lineSeparator());
                 writer.flush();
             }
-        }catch (NoSuchElementException ex){
+        } catch (NoSuchElementException ex) {
             System.out.println("Client dropped connection");
         }
     }
-
 }
-
 
